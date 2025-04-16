@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/joho/godotenv"
 )
 
 var (
@@ -19,10 +21,14 @@ var (
 	err     error
 )
 
+func init() {
+	godotenv.Load()
+}
+
 func main() {
 	cfg := mysql.NewConfig()
-	cfg.User = "root"
-	cfg.Passwd = "88005553535"
+	cfg.User = os.Getenv("MYSQL_USERNAME")
+	cfg.Passwd = os.Getenv("MYSQL_PASSWORD")
 	cfg.Net = "tcp"
 	cfg.Addr = "127.0.0.1:3306"
 	cfg.DBName = "recordings"
