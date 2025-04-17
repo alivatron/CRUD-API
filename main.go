@@ -35,7 +35,7 @@ func main() {
 
 	db, err = sql.Open("mysql", cfg.FormatDSN())
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error acured while trying to connect to mysql: ", err)
 	}
 
 	err = db.Ping()
@@ -51,7 +51,7 @@ func main() {
 
 	err = http.ListenAndServe(":8080", ServerMux)
 	if err != nil {
-		fmt.Print("penis")
+		log.Fatal("error from ListenAndServe by 8080 port: ", err)
 	}
 }
 
@@ -65,10 +65,20 @@ func handle(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
 		var task task
-		json.NewDecoder(r.Body).Decode(&task)
+		err := json.NewDecoder(r.Body).Decode(&task)
+		if err != nil {
+			w.Write([]byte("bad request: " + err.Error()))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		counter++
 		task.Id = counter
-		db.Exec("INSERT INTO tasks (title, done) VALUES(?, ?)", task.Title, task.Done)
+		res, err := db.Exec("INSERT INTO tasks (title, done) VALUES(?, ?)", task.Title, task.Done)
+		if aff, _ := res.RowsAffected(); aff == 0 || err != nil {
+			w.Write([]byte("bad SQL request"))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(task)
 	case http.MethodGet:
@@ -77,6 +87,7 @@ func handle(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			w.Write([]byte("GET error after sql zapros"))
 			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
 		for rows.Next() {
 			rows.Scan(&task.Id, &task.Title, &task.Done)
@@ -91,7 +102,12 @@ func handleId(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		var task task
-		id, _ := strconv.Atoi(strings.Split(strings.Split(r.URL.Path, "/")[2], "_")[1])
+		id, err := strconv.Atoi(strings.Split(strings.Split(r.URL.Path, "/")[2], "_")[1])
+		if err != nil {
+			w.Write([]byte("wrong id format in URL path"))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		row := db.QueryRow("SELECT id, title, done FROM tasks WHERE id = ?", id)
 		if err = row.Scan(&task.Id, &task.Title, &task.Done); err != nil {
 			w.WriteHeader(http.StatusNotFound)
@@ -102,7 +118,12 @@ func handleId(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(task)
 	case http.MethodDelete:
 		id, _ := strconv.Atoi(strings.Split(strings.Split(r.URL.Path, "/")[2], "_")[1])
-		res, _ := db.Exec("DELETE FROM tasks WHERE id = ?", id)
+		res, err := db.Exec("DELETE FROM tasks WHERE id = ?", id)
+		if err != nil {
+			w.Write([]byte("problem accured while trying to execute sql request for DELETE method"))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		if aff, _ := res.RowsAffected(); aff == 0 {
 			w.Write([]byte("no rows was affected but thats ok maybe?"))
 			w.WriteHeader(http.StatusNotFound)
@@ -110,11 +131,26 @@ func handleId(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(204)
 	case http.MethodPut:
-		id, _ := strconv.Atoi(strings.Split(strings.Split(r.URL.Path, "/")[2], "_")[1])
+		id, err := strconv.Atoi(strings.Split(strings.Split(r.URL.Path, "/")[2], "_")[1])
+		if err != nil {
+			w.Write([]byte("wrong id in URL path"))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		var task task
-		json.NewDecoder(r.Body).Decode(&task)
+		err = json.NewDecoder(r.Body).Decode(&task)
+		if err != nil {
+			w.Write([]byte("PUT method error after decoding json data"))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		task.Id = id
-		db.Exec("INSERT INTO tasks (id, title, done) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE title = VALUES(title), done = VALUES(done);", task.Id, task.Title, task.Done)
+		req, err := db.Exec("INSERT INTO tasks (id, title, done) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE title = VALUES(title), done = VALUES(done);", task.Id, task.Title, task.Done)
+		if aff, _ := req.RowsAffected(); aff == 0 || err != nil {
+			w.Write([]byte("PUT method error after INSERT sql request"))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		tasks[id] = task
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(task)
