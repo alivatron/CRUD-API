@@ -67,7 +67,7 @@ func handle(w http.ResponseWriter, r *http.Request) {
 		var task task
 		err := json.NewDecoder(r.Body).Decode(&task)
 		if err != nil {
-			w.Write([]byte("something is wrong with request body, please make sure that json format is ok"))
+			w.Write([]byte("bad request: " + err.Error()))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
