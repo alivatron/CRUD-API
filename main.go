@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
@@ -71,9 +70,6 @@ func main() {
 
 	<-ctx.Done()
 	serv.Shutdown(ctx)
-	fmt.Print("timer started")
-	time.Sleep(5 * time.Second)
-	fmt.Print("gracefully shutdown")
 }
 
 type task struct {
