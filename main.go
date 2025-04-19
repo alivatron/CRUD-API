@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
@@ -19,6 +23,7 @@ var (
 	counter int
 	db      *sql.DB
 	err     error
+	serv    http.Server
 )
 
 func init() {
@@ -26,6 +31,15 @@ func init() {
 }
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		exit := make(chan os.Signal, 1)
+		signal.Notify(exit, os.Interrupt, syscall.SIGTERM)
+		<-exit
+		cancel()
+	}()
+
 	cfg := mysql.NewConfig()
 	cfg.User = os.Getenv("MYSQL_USERNAME")
 	cfg.Passwd = os.Getenv("MYSQL_PASSWORD")
@@ -49,10 +63,17 @@ func main() {
 	ServerMux.HandleFunc("/tasks", handle)
 	ServerMux.HandleFunc("/tasks/{id}", handleId)
 
-	err = http.ListenAndServe(":8080", ServerMux)
-	if err != nil {
-		log.Fatal("error from ListenAndServe by 8080 port: ", err)
-	}
+	go func() {
+		if err = http.ListenAndServe(serv.Addr, ServerMux); err != nil {
+			log.Fatal("error from ListenAndServe by 8080 port: ", err)
+		}
+	}()
+
+	<-ctx.Done()
+	serv.Shutdown(ctx)
+	fmt.Print("timer started")
+	time.Sleep(5 * time.Second)
+	fmt.Print("gracefully shutdown")
 }
 
 type task struct {
